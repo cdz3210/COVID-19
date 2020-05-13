@@ -1,0 +1,134 @@
+function COVID-19CasesPredictMovie
+clc
+clear
+close all
+
+
+ChinaMap = shaperead('City347TW.shp');
+XCityPolygons  = extractfield(ChinaMap,'X');    
+YCityPolygons  = extractfield(ChinaMap,'Y');    
+
+onsetcases = shaperead('onsetcases points');
+XCoords = extractfield(onsetases,'X')';     
+YCoords = extractfield(onsetcases,'Y')';     
+onsetDate = char(extractfield(onsetcases,'onsetDate'));
+onsetDate = datenum([onsetDate(:,1:4),char(32*ones(size(onsetDate,1),1)),....
+    onsetDate(:,5:6),char(32*ones(size(onsetDate,1),1)),onsetDate(:,7:8)]);
+
+UniqIllDate = unique(onsetDate,'rows','stable');    
+
+load('.\ChinaBaseMapTris.mat')
+
+GifFrame = struct('cdata',{},'colormap',{});   
+
+figure('Name','Chinese Map')   
+MaxWindow
+
+for indx = 11 : length(UniqonsetDate)
+    %
+    focusdate = UniqOnsetDate(indx);
+    uilldate = UniqOnsetDate(find(UniqOnsetDate < focusdate, 1, 'last'));
+    load(['KDE_Risk',datestr(uilldate,'dd-mmm'),'.mat'])
+    %
+    intervalday = focusdate - uilldate ;
+    %
+    if intervalday>16
+        RiskZ = zeros(size(XdataSet));
+    else
+        RiskZ = KDE_RiskZ(1:size(KDE_RiskZ,1)-length(onsetcases), 17+intervalday);
+        RiskZ = RiskZ/max(RiskZ(:));
+    end
+    
+    trimesh(TriAnglSet, XdataSet, YdataSet, RiskZ, 'EdgeColor', 'none', 'FaceColor', 'interp')
+    
+    colormap('default');
+    ColorData = colormap;
+    ColorDataNew = zeros(85,3);
+    ColorDataNew(1:3:85,:) = ColorData(36:64,:);
+    ColorDataNew(2:3:83,:) = diff(ColorData(36:64,:))/3 + ColorData(36:63,:);
+    ColorDataNew(3:3:84,:) = 2*diff(ColorData(36:64,:))/3 + ColorData(36:63,:);
+    colormap(ColorDataNew)
+    
+    pos = get(gca,'pos');
+    caxis([0,1])
+    colorbar('FontName','Times New Roman','FontSize',12,'Position',[pos(1)+0.79*pos(3),pos(2)+pos(4)/6,0.012,pos(4)/3])
+    
+    title([datestr(uilldate),'$\;\buildrel predicting\over\longrightarrow\quad\quad\,$',datestr(focusdate)], 'FontName','Times New Roman','FontSize',12,'interpreter','latex')
+
+    set(gca,'DataAspectRatio',[2e6 2e6 1])
+    hold on
+
+    indate = (IllDate == focusdate);
+    plot3(XCoords(indate), YCoords(indate), ones(size(XCoords(indate))),'bo','MarkerSize',6)
+    plot3(XCoords(indate), YCoords(indate), ones(size(XCoords(indate))),'b+','MarkerSize',6)
+    
+    legdx = -2.8*1e6;    legdy = 2.9*1e6;
+    plot3(legdx, legdy, 1, 'bo', 'MarkerSize', 7)
+    plot3(legdx, legdy, 1, 'b+', 'MarkerSize', 7)
+    
+    set(text(legdx + 0.5*1e6, legdy,'$Subsequent\ Cases$'),'FontName','Times New Roman','FontSize',8,'interpreter','latex','LineStyle','none','HorizontalAlignment','center');
+
+    plot3(XCityPolygons, YCityPolygons, (0.1+max(RiskZ(:)))*ones(size(XCityPolygons)), 'k-','LineWidth',0.05)  
+   
+    hold off
+    view(0,90)
+    set(gcf,'Renderer','zbuffer')
+    
+    X = -3*1e6 + [0, 12*1e5];   y = 2.6*1e6;
+    benruler(X,y,'km')          
+    axis image
+    axis off
+    
+    pause(1)
+    GifFrame(end+1) = getframe(gcf);   
+    pause(1)
+end
+GifFrame(end+1:end+5) = GifFrame(end);
+writegif('ST_Predict_KDE_COVID-19.gif', GifFrame, 0.5);
+
+
+function benruler(X,y,unit)
+
+Lenth = abs(diff(X));
+width = 0.618*Lenth*0.0618;
+
+t = [0 1/12 1/6 7/12 1];
+Xt = (1-t)*X(1) + t*X(2);
+
+line([X(:),ones(2,1)*Xt],[[y;y],repmat([y;y-width],size(t))],'Color','k')
+
+tu = 1+4*width/Lenth;
+set(text([Xt([1,3:end]),(1-tu)*X(1) + tu*X(2)],y-2.25*width*ones(size(Xt)),{'200','0','500','1000',unit}),'FontName','Times New Roman','FontSize',12,'LineStyle','none','HorizontalAlignment','center');
+
+
+function MaxWindow  
+
+figname = get(gcf,'Name');
+if isequal(get(gcf,'NumberTitle'),'on')
+    figtag = ['Figure ',num2str(get(gcf,'Number'))];
+    if ~isempty(figname)
+        figtag = [figtag,': ',figname];
+    end
+else
+    figtag = figname;
+end
+
+MDEInstance = com.mathworks.mde.desk.MLDesktop.getInstance;
+drawnow
+JavaObject = MDEInstance.getClient(figtag);
+JavaFrame = JavaObject.getRootPane.getParent();
+JavaFrame.setMaximized(1);
+
+
+function writegif(name,frames,dt)
+nframe = length(frames);
+%
+for k = 1 : nframe
+    image = frame2im(frames(k));
+    [im,map] = rgb2ind(image,1024);
+    if k==1
+        imwrite(im,map,name,'GIF','WriteMode','overwrite','DelayTime',dt,'LoopCount',1)
+    else
+        imwrite(im,map,name,'WriteMode','append','DelayTime',dt); %,'LoopCount',inf);
+    end
+end
